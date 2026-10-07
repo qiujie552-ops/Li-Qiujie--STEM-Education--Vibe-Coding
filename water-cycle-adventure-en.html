@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#7ec8f2">
+<title>The Water Cycle Adventure</title>
+<style>
+  /* ==========================================================
+     1. Global theme variables
+     ========================================================== */
+  :root{
+    --sky-1:#dff0ff;
+    --ink:#2b3a55;
+    --ink-soft:#64748f;
+    --line:rgba(43,58,85,.10);
+    --shadow:0 18px 40px -18px rgba(38,78,130,.45);
+    --radius:26px;
+    --font:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",
+           ui-rounded,"Nunito","Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+
+  html,body{height:100%;}
+
+  body{
+    margin:0;
+    padding:14px;
+    min-height:100dvh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--font);
+    color:var(--ink);
+    background:
+      radial-gradient(1100px 600px at 12% -10%, #eaf7ff 0%, rgba(234,247,255,0) 60%),
+      radial-gradient(900px 700px at 105% 10%, #ffeede 0%, rgba(255,238,222,0) 55%),
+      linear-gradient(160deg,#f4fbff 0%,#eaf4ff 45%,#e6f1ff 100%);
+    overflow:hidden;
+  }
+
+  /* ==========================================================
+     2. App shell (HUD / stage / controls)
+     ========================================================== */
+  .app{
+    width:min(100%,1040px);
+    height:100%;
+    max-height:940px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+
+  /* ---------- A. Top HUD ---------- */
+  .hud{
+    background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:14px 18px 13px;
+    flex:0 0 auto;
+  }
+
+  .hud-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .title{
+    margin:0;
+    font-size:clamp(19px,2.5vw,27px);
+    font-weight:800;
+    letter-spacing:.3px;
+    display:flex;
+    align-items:baseline;
+    gap:9px;
+    line-height:1.15;
+  }
+
+  .title small{
+    font-size:clamp(10px,1.2vw,12.5px);
+    font-weight:600;
+    letter-spacing:.6px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+  }
+
+  /* State badge: colour follows the temperature */
+  .state{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 16px;
+    border-radius:999px;
+    font-weight:800;
+    font-size:clamp(14px,1.7vw,17px);
+    color:#0d4a72;
+    background:linear-gradient(135deg,#d7efff,#bfe3ff);
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.85), 0 6px 14px -8px rgba(40,110,170,.6);
+    transition:background .5s ease,color .5s ease,transform .25s ease;
+    white-space:nowrap;
+  }
+  .state.state-ice{ background:linear-gradient(135deg,#e9f5ff,#cbe6ff); color:#2b6ea8; }
+  .state.state-vapor{ background:linear-gradient(135deg,#fff1dc,#ffd9a8); color:#a35a10; }
+  .state .state-emoji{ font-size:1.15em; }
+
+  /* Science tip */
+  .tip{
+    margin:10px 0 0;
+    padding:9px 14px;
+    border-radius:16px;
+    font-size:clamp(12.5px,1.55vw,15px);
+    line-height:1.5;
+    font-weight:600;
+    color:#2f5a80;
+    background:linear-gradient(90deg,#f0f8ff,#eaf4ff);
+    border-left:5px solid #7cc4f5;
+    transition:border-color .5s ease,color .5s ease,background .5s ease;
+  }
+  .tip.is-hot{ color:#9a5410; border-left-color:#ffab4c; background:linear-gradient(90deg,#fff6ec,#fff1e2); }
+  .tip.is-cold{ color:#2b6ea8; border-left-color:#79b9ff; background:linear-gradient(90deg,#f1f9ff,#e8f3ff); }
+  .tip.is-rain{ color:#41508a; border-left-color:#6f7fd6; background:linear-gradient(90deg,#f2f4ff,#ecefff); }
+
+  /* ---------- B. Center stage ---------- */
+  .stage{
+    position:relative;
+    flex:1 1 auto;
+    min-height:250px;
+    border-radius:var(--radius);
+    overflow:hidden;
+    border:1px solid var(--line);
+    box-shadow:var(--shadow);
+    background:var(--sky-1);
+    isolation:isolate;
+  }
+
+  #stageCanvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+
+  /* Cloud (DOM + CSS so it can darken and rain) */
+  .cloud{
+    position:absolute;
+    top:10px;
+    left:50%;
+    width:clamp(124px,20vw,168px);
+    height:clamp(56px,9vw,74px);
+    transform:translateX(-50%);
+    pointer-events:none;
+    z-index:3;
+    animation:cloudFloat 6s ease-in-out infinite;
+  }
+  @keyframes cloudFloat{
+    0%,100%{ transform:translateX(-50%) translateY(0); }
+    50%    { transform:translateX(-50%) translateY(-6px); }
+  }
+
+  .cloud .puff,
+  .cloud .base{
+    position:absolute;
+    background:#ffffff;
+    border-radius:999px;
+    transition:background .9s ease,box-shadow .9s ease;
+    box-shadow:0 8px 18px -10px rgba(60,110,160,.55);
+  }
+  .cloud .base{ left:0; right:0; bottom:0; height:46%; border-radius:999px; }
+  .cloud .p1{ left:14%;  bottom:22%; width:44%; height:82%; }
+  .cloud .p2{ left:40%;  bottom:30%; width:50%; height:100%; }
+  .cloud .p3{ left:6%;   bottom:26%; width:34%; height:64%; }
+
+  /* Turns into a rain cloud once it is full */
+  .cloud.is-dark .puff,
+  .cloud.is-dark .base{
+    background:linear-gradient(180deg,#8894b4,#5c6a90);
+    box-shadow:0 10px 20px -10px rgba(30,45,80,.7);
+  }
+
+  /* Cloud charge meter */
+  .cloud-meter{
+    position:absolute;
+    top:calc(clamp(56px,9vw,74px) + 16px);
+    left:50%;
+    transform:translateX(-50%) scale(.9);
+    width:clamp(104px,17vw,140px);
+    height:9px;
+    border-radius:999px;
+    background:rgba(255,255,255,.7);
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9),0 4px 10px -6px rgba(40,80,130,.6);
+    overflow:hidden;
+    opacity:0;
+    transition:opacity .35s ease,transform .35s ease;
+    z-index:3;
+    pointer-events:none;
+  }
+  .cloud-meter.is-on{ opacity:1; transform:translateX(-50%) scale(1); }
+  .cloud-meter i{
+    display:block;
+    height:100%;
+    width:0%;
+    border-radius:999px;
+    background:linear-gradient(90deg,#8fd7ff,#4aa8ff,#8f7bff);
+  }
+
+  /* Rain layer */
+  .rain{
+    position:absolute;
+    inset:0;
+    z-index:4;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .6s ease;
+  }
+  .rain.is-active{ opacity:1; }
+  .rain .drop{
+    position:absolute;
+    top:-30px;
+    width:3px;
+    border-radius:999px;
+    background:linear-gradient(180deg,rgba(140,200,255,0),rgba(80,160,245,.95));
+    animation-name:fall;
+    animation-timing-function:linear;
+    animation-iteration-count:infinite;
+  }
+  @keyframes fall{
+    0%  { transform:translateY(-10%); opacity:0; }
+    12% { opacity:.85; }
+    100%{ transform:translateY(var(--fall,700px)); opacity:.85; }
+  }
+
+  /* Hint pill inside the stage */
+  .stage-hint{
+    position:absolute;
+    left:50%;
+    bottom:12px;
+    transform:translateX(-50%);
+    z-index:5;
+    padding:8px 15px;
+    border-radius:999px;
+    font-size:clamp(11px,1.4vw,13px);
+    font-weight:700;
+    color:#2f5a80;
+    background:rgba(255,255,255,.86);
+    backdrop-filter:blur(6px);
+    box-shadow:0 10px 22px -14px rgba(40,80,130,.8);
+    transition:opacity .5s ease,transform .5s ease;
+    white-space:nowrap;
+    max-width:92%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    pointer-events:none;
+  }
+  .stage-hint.is-hidden{ opacity:0; transform:translateX(-50%) translateY(8px); }
+
+  /* ---------- C. Bottom controls ---------- */
+  .controls{
+    flex:0 0 auto;
+    background:linear-gradient(180deg,#ffffff,#f6fbff);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:12px 18px 14px;
+  }
+
+  .temp-row{
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+
+  /* Temperature slider */
+  .slider-wrap{ position:relative; flex:1 1 auto; min-width:0; padding-bottom:16px; }
+
+  input[type=range]{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    height:34px;
+    background:transparent;
+    margin:0;
+    cursor:pointer;
+    display:block;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:16px;
+    border-radius:999px;
+    background:linear-gradient(90deg,#4da3ff 0%,#35d6c4 34%,#8bd44f 58%,#ffb03a 82%,#ff5a4d 100%);
+    box-shadow:inset 0 2px 5px rgba(0,0,0,.16),inset 0 0 0 2px rgba(255,255,255,.55);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:30px;
+    height:30px;
+    margin-top:-7px;
+    border-radius:50%;
+    background:radial-gradient(circle at 34% 30%,#ffffff 0%,#f3f9ff 60%,#dbe9f8 100%);
+    border:3px solid #ffffff;
+    box-shadow:0 5px 14px -4px rgba(30,70,120,.65),0 0 0 1.5px rgba(60,120,180,.25);
+    transition:transform .15s ease;
+  }
+  input[type=range]:active::-webkit-slider-thumb{ transform:scale(1.14); }
+  input[type=range]::-moz-range-track{
+    height:16px;border-radius:999px;
+    background:linear-gradient(90deg,#4da3ff,#35d6c4,#8bd44f,#ffb03a,#ff5a4d);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:26px;height:26px;border-radius:50%;border:3px solid #fff;
+    background:#f3f9ff;box-shadow:0 5px 14px -4px rgba(30,70,120,.65);
+  }
+
+  /* Scale labels under the slider */
+  .scale{
+    position:absolute;
+    left:9px;
+    right:9px;
+    bottom:0;
+    display:flex;
+    justify-content:space-between;
+    font-size:10.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    letter-spacing:.2px;
+  }
+  .scale span.hot{ color:#e8663f; }
+
+  /* Big temperature readout */
+  .temp-readout{
+    flex:0 0 auto;
+    display:flex;
+    align-items:baseline;
+    gap:3px;
+    min-width:118px;
+    justify-content:center;
+    padding:4px 14px;
+    border-radius:18px;
+    background:#f3f9ff;
+    box-shadow:inset 0 0 0 1.5px rgba(120,180,235,.35);
+  }
+  .temp-readout #tempValue{
+    font-size:clamp(28px,4.6vw,42px);
+    font-weight:900;
+    line-height:1;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-1px;
+    transition:color .4s ease;
+  }
+  .temp-readout .unit{ font-size:clamp(14px,2vw,19px); font-weight:800; color:var(--ink-soft); }
+
+  /* Quick preset buttons */
+  .quick-row{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:10px;
+    margin-top:12px;
+  }
+  .qbtn{
+    font-family:inherit;
+    font-size:clamp(11.5px,1.55vw,15px);
+    font-weight:800;
+    color:#31506f;
+    padding:12px 8px;
+    border-radius:18px;
+    border:none;
+    cursor:pointer;
+    background:linear-gradient(180deg,#ffffff,#eef6ff);
+    box-shadow:0 6px 14px -9px rgba(40,90,140,.9),inset 0 0 0 1.5px rgba(160,200,235,.55);
+    transition:transform .13s ease,box-shadow .25s ease,background .25s ease,color .25s ease;
+    white-space:nowrap;
+  }
+  .qbtn:hover{ transform:translateY(-2px); }
+  .qbtn:active{ transform:translateY(1px) scale(.985); }
+  .qbtn.is-active{ color:#fff; box-shadow:0 12px 22px -12px rgba(40,90,140,.95); }
+  .qbtn.ice.is-active{ background:linear-gradient(180deg,#9fd8ff,#5fb2f0); }
+  .qbtn.liquid.is-active{ background:linear-gradient(180deg,#6fd0ff,#2f95e0); }
+  .qbtn.vapor.is-active{ background:linear-gradient(180deg,#ffb867,#f4813a); }
+
+  /* ==========================================================
+     3. Win dialog
+     ========================================================== */
+  .modal{
+    position:fixed;
+    inset:0;
+    z-index:40;
+    display:grid;
+    place-items:center;
+    padding:20px;
+    background:rgba(28,50,80,.45);
+    backdrop-filter:blur(7px);
+    opacity:0;
+    transition:opacity .32s ease;
+  }
+  .modal[hidden]{ display:none; }
+  .modal.is-open{ opacity:1; }
+
+  .modal-card{
+    width:min(100%,460px);
+    text-align:center;
+    padding:26px 24px 24px;
+    border-radius:30px;
+    background:linear-gradient(180deg,#ffffff,#f4fbff);
+    box-shadow:0 34px 70px -26px rgba(15,40,80,.7);
+    transform:translateY(14px) scale(.94);
+    transition:transform .38s cubic-bezier(.22,1.2,.36,1);
+  }
+  .modal.is-open .modal-card{ transform:translateY(0) scale(1); }
+
+  .modal-emoji{ font-size:52px; line-height:1; animation:pop 1.4s ease-in-out infinite; }
+  @keyframes pop{ 0%,100%{ transform:scale(1) rotate(-4deg);} 50%{ transform:scale(1.12) rotate(4deg);} }
+
+  .modal-card h2{
+    margin:12px 0 8px;
+    font-size:clamp(18px,2.6vw,23px);
+    font-weight:900;
+    color:#20486e;
+  }
+  .modal-card p{
+    margin:0 0 18px;
+    font-size:clamp(13px,1.7vw,15px);
+    line-height:1.65;
+    color:#4a6a8c;
+    font-weight:600;
+  }
+  .modal-card p b{ color:#2f8fdc; }
+
+  .modal-btn{
+    font-family:inherit;
+    font-size:clamp(15px,2vw,17px);
+    font-weight:900;
+    color:#fff;
+    padding:14px 30px;
+    border:none;
+    border-radius:999px;
+    cursor:pointer;
+    background:linear-gradient(180deg,#6fd0ff,#2f95e0);
+    box-shadow:0 16px 26px -14px rgba(30,120,190,.95);
+    transition:transform .14s ease;
+  }
+  .modal-btn:hover{ transform:translateY(-2px); }
+  .modal-btn:active{ transform:translateY(1px) scale(.98); }
+
+  /* ==========================================================
+     4. Responsive layout (phone / iPad)
+     ========================================================== */
+  @media (max-width:640px){
+    body{ padding:9px; }
+    .app{ gap:8px; }
+    .hud{ padding:12px 13px; }
+    .hud-row{ gap:8px; }
+    .title small{ display:none; }
+    .tip{ margin-top:8px; padding:8px 11px; }
+    .controls{ padding:10px 13px 12px; }
+    .temp-row{ gap:10px; }
+    .temp-readout{ min-width:96px; padding:3px 10px; }
+    .qbtn{ padding:11px 4px; font-size:clamp(11px,3vw,13.5px); }
+  }
+  @media (max-width:360px){
+    .state{ padding:6px 12px; }
+    .stage-hint{ font-size:10.5px; padding:6px 10px; }
+    .scale{ font-size:9.5px; }
+  }
+  @media (max-height:560px) and (orientation:landscape){
+    .app{ max-height:none; }
+    .tip{ display:none; }
+    .stage{ min-height:170px; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    .cloud,.modal-emoji{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= A. Top HUD ================= -->
+  <header class="hud">
+    <div class="hud-row">
+      <h1 class="title">💧 The Water Cycle Adventure <small>Little Droplet&rsquo;s Big Journey</small></h1>
+      <div class="state" id="stateBadge">
+        <span class="state-emoji" id="stateEmoji">💧</span>
+        <span id="stateName">Water Drop</span>
+      </div>
+    </div>
+    <p class="tip" id="tip">💧 Between 0°C and 99°C water stays liquid — it flows and wobbles like a little river!</p>
+  </header>
+
+  <!-- ================= B. Center stage ================= -->
+  <main class="stage" id="stage">
+    <canvas id="stageCanvas"></canvas>
+
+    <!-- Cloud: darkens and rains once it is full of vapor -->
+    <div class="cloud" id="cloud" aria-hidden="true">
+      <span class="puff p3"></span>
+      <span class="puff p1"></span>
+      <span class="puff p2"></span>
+      <span class="base"></span>
+    </div>
+    <div class="cloud-meter" id="cloudMeter" aria-hidden="true"><i id="cloudMeterFill"></i></div>
+
+    <!-- Rain layer -->
+    <div class="rain" id="rain" aria-hidden="true"></div>
+
+    <div class="stage-hint" id="stageHint">👉 Drag the temperature slider below and watch Little Droplet change!</div>
+  </main>
+
+  <!-- ================= C. Bottom controls ================= -->
+  <footer class="controls">
+    <div class="temp-row">
+      <div class="slider-wrap">
+        <input id="tempSlider" type="range" min="-20" max="120" step="1" value="25"
+               aria-label="Temperature slider, from -20 to 120 degrees Celsius">
+        <div class="scale">
+          <span>-20°C Ice</span>
+          <span>0°C</span>
+          <span class="hot">100°C Boiling</span>
+          <span class="hot">120°C</span>
+        </div>
+      </div>
+      <div class="temp-readout" aria-live="polite">
+        <span id="tempValue">25</span><span class="unit">°C</span>
+      </div>
+    </div>
+
+    <div class="quick-row">
+      <button class="qbtn ice"    data-temp="-10">🧊 Freeze -10°C</button>
+      <button class="qbtn liquid is-active" data-temp="25">💧 Room 25°C</button>
+      <button class="qbtn vapor"  data-temp="100">🔥 Heat 100°C</button>
+    </div>
+  </footer>
+</div>
+
+<!-- ================= D. Win dialog ================= -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-emoji">🎉</div>
+    <h2 id="modalTitle">Well done! You completed the whole water cycle!</h2>
+    <p>
+      Little Droplet was heated into <b>water vapor</b>, rose into the sky and <b>condensed</b> into a cloud.
+      When the cloud could hold no more, it fell back down as <b>rain (precipitation)</b> and returned to rivers, lakes and oceans.<br>
+      The cycle: Evaporation ➜ Condensation ➜ Precipitation ➜ Collection
+    </p>
+    <button class="modal-btn" id="replayBtn">🔁 Play Again</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   The Water Cycle Adventure — main logic
+   Sections: 1 utils, 2 element refs, 3 sizing, 4 state, 5 particles,
+             6 update, 7 draw, 8 copy, 9 events, 10 main loop
+   ============================================================ */
+(function () {
+  'use strict';
+
+  /* ---------- 1. Utilities ---------- */
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand  = (a, b) => a + Math.random() * (b - a);
+  const lerp  = (a, b, t) => a + (b - a) * t;
+  const mixColor = (c1, c2, t) => [
+    lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)
+  ];
+  const rgba = (c, a) => 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + a + ')';
+
+  /* ---------- 2. Element references ---------- */
+  const stage       = document.getElementById('stage');
+  const canvas      = document.getElementById('stageCanvas');
+  const ctx         = canvas.getContext('2d');
+  const cloudEl     = document.getElementById('cloud');
+  const cloudMeter  = document.getElementById('cloudMeter');
+  const meterFill   = document.getElementById('cloudMeterFill');
+  const rainLayer   = document.getElementById('rain');
+  const stateBadge  = document.getElementById('stateBadge');
+  const stateEmoji  = document.getElementById('stateEmoji');
+  const stateName   = document.getElementById('stateName');
+  const tipEl       = document.getElementById('tip');
+  const slider      = document.getElementById('tempSlider');
+  const tempValueEl = document.getElementById('tempValue');
+  const quickBtns   = Array.prototype.slice.call(document.querySelectorAll('.qbtn'));
+  const stageHint   = document.getElementById('stageHint');
+  const modal       = document.getElementById('modal');
+  const replayBtn   = document.getElementById('replayBtn');
+
+  /* ---------- 3. Canvas size and world coordinates ---------- */
+  let W = 0, H = 0, groundY = 0, R = 40;   // R = base radius of Little Droplet
+
+  function resize() {
+    const rect = stage.getBoundingClientRect();
+    W = Math.max(260, Math.round(rect.width));
+    H = Math.max(200, Math.round(rect.height));
+    R = clamp(Math.min(W, H) * 0.115, 24, 46);
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    groundY = H - Math.max(54, H * 0.17);        // the ground line
+    // keep the character inside the visible area after a resize
+    G.x = clamp(G.x || W / 2, R, W - R);
+    G.y = clamp(G.y === 0 ? groundY - R : G.y, -80, groundY - R * 0.4);
+    // rain drops fall as far as the stage is tall
+    rainLayer.style.setProperty('--fall', (H + 60) + 'px');
+  }
+
+  /* ---------- 4. Game state ---------- */
+  const G = {
+    target: 25,          // temperature set with the slider
+    temp: 25,            // smoothed temperature (decides the state)
+    phase: 'liquid',     // ice | liquid | vapor
+    prevPhase: 'liquid',
+    morph: 1,            // morph progress 0 → 1
+    time: 0,
+    x: 0, y: 0,
+    vy: 0,
+    alpha: 1,
+    heatTime: 0,         // seconds spent at 100°C or above
+    raining: false,
+    won: false,
+    particles: { steam: [], bubble: [], snow: [], splash: [] },
+    acc: { steam: 0, bubble: 0, snow: 0 }
+  };
+
+  /** Temperature to state: below 0 ice, 0–99 liquid, 100+ vapor */
+  function phaseOf(t) {
+    if (t < 0) return 'ice';
+    if (t < 100) return 'liquid';
+    return 'vapor';
+  }
+
+  /* ---------- 5. Particle spawners ---------- */
+  function spawnSteam(n) {
+    for (let i = 0; i < n; i++) {
+      G.particles.steam.push({
+        x: G.x + rand(-R * 0.7, R * 0.7),
+        y: G.y + rand(-R * 0.2, R * 0.6),
+        r: rand(5, 12),
+        vy: rand(-38, -20),
+        vx: rand(-9, 9),
+        life: 1
+      });
+    }
+  }
+
+  function spawnBubble(n) {
+    for (let i = 0; i < n; i++) {
+      G.particles.bubble.push({
+        x: G.x + rand(-R * 0.55, R * 0.55),
+        y: G.y + rand(0, R * 0.7),
+        r: rand(2.5, 6),
+        vy: rand(-42, -20),
+        life: 1
+      });
+    }
+  }
+
+  function spawnSnow(n) {
+    for (let i = 0; i < n; i++) {
+      G.particles.snow.push({
+        x: rand(0, W),
+        y: rand(-30, 0),
+        r: rand(1.6, 3.8),
+        vy: rand(16, 42),
+        sway: rand(0.5, 1.6),
+        phase: rand(0, Math.PI * 2)
+      });
+    }
+  }
+
+  function spawnSplash(n) {
+    for (let i = 0; i < n; i++) {
+      G.particles.splash.push({
+        x: rand(0, W),
+        y: groundY + rand(-4, 6),
+        vy: rand(-95, -40),
+        vx: rand(-28, 28),
+        r: rand(1.4, 3.2),
+        life: 1
+      });
+    }
+  }
+
+  /* ---------- 6. Per-frame update ---------- */
+  function update(dt) {
+    G.time += dt;
+
+    // smooth the temperature so the state change looks natural
+    G.temp += (G.target - G.temp) * Math.min(1, dt * 3);
+    if (Math.abs(G.target - G.temp) < 0.06) G.temp = G.target;
+
+    // state change (cross-faded so it looks like a morph)
+    const p = phaseOf(G.temp);
+    if (p !== G.phase) {
+      G.prevPhase = G.phase;
+      G.phase = p;
+      G.morph = 0;
+    }
+    G.morph = Math.min(1, G.morph + dt * 1.7);
+
+    updatePhysics(dt);
+    updateParticles(dt);
+    updateCycle(dt);
+  }
+
+  /* Physics for the three states */
+  function updatePhysics(dt) {
+    const halfBottom = G.phase === 'ice' ? R * 1.05 : R;
+    const floor = groundY - halfBottom;
+
+    if (G.phase === 'ice') {
+      // Ice: drops fast, then rests on the ground with a tiny bounce
+      G.vy += 2100 * dt;
+      G.y += G.vy * dt;
+      G.x += ((W / 2) - G.x) * Math.min(1, dt * 1.6);
+      if (G.y >= floor) {
+        G.y = floor;
+        G.vy = Math.abs(G.vy) > 260 ? -G.vy * 0.24 : 0;
+      }
+      G.alpha = Math.min(1, G.alpha + dt * 2);
+
+    } else if (G.phase === 'liquid') {
+      // Liquid: bobs gently above the ground and sways sideways
+      const targetY = floor - 4 + Math.sin(G.time * 1.7) * 6.5;
+      G.y += (targetY - G.y) * Math.min(1, dt * 5);
+      G.x += ((W / 2 + Math.sin(G.time * 0.85) * 15) - G.x) * Math.min(1, dt * 3.2);
+      G.vy = 0;
+      G.alpha = Math.min(1, G.alpha + dt * 2);
+
+    } else {
+      // Vapor: drifts up, fades out near the top, then restarts from the bottom
+      G.vy = -46;
+      G.y += G.vy * dt;
+      G.x += ((W / 2 + Math.sin(G.time * 1.05) * 30) - G.x) * Math.min(1, dt * 1.8);
+
+      if (G.y < 96) G.alpha -= dt * 0.95;          // fade out near the top
+      else          G.alpha = Math.min(1, G.alpha + dt * 1.4);
+
+      if (G.y < -70 || G.alpha <= 0) {             // loop: restart the climb from the bottom
+        G.y = H - 34;
+        G.x = W / 2 + rand(-40, 40);
+        G.alpha = 0;
+      }
+    }
+  }
+
+  /* Particle spawning and motion */
+  function updateParticles(dt) {
+    const P = G.particles;
+
+    // Steam: the hotter it gets, the harder it rises
+    if (G.temp > 55) {
+      G.acc.steam += ((G.temp - 55) / 65) * 26 * dt;
+      while (G.acc.steam >= 1) { spawnSteam(1); G.acc.steam -= 1; }
+    }
+    // Bubbles rise while the drop is liquid
+    if (G.phase === 'liquid') {
+      G.acc.bubble += 5 * dt;
+      while (G.acc.bubble >= 1) { spawnBubble(1); G.acc.bubble -= 1; }
+    }
+    // Snowflakes drift down when it is cold
+    if (G.temp < 6) {
+      G.acc.snow += ((6 - G.temp) / 24) * 26 * dt;
+      while (G.acc.snow >= 1) { spawnSnow(1); G.acc.snow -= 1; }
+    }
+    // Splashes on the ground while it rains
+    if (G.raining && Math.random() < dt * 26) spawnSplash(1);
+
+    P.steam = P.steam.filter(function (p) {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 6 * dt;
+      p.r += 9 * dt; p.life -= dt * 0.75;
+      return p.life > 0 && p.y > -40;
+    });
+    P.bubble = P.bubble.filter(function (p) {
+      p.y += p.vy * dt; p.life -= dt * 0.85;
+      return p.life > 0;
+    });
+    P.snow = P.snow.filter(function (p) {
+      p.y += p.vy * dt;
+      p.x += Math.sin(G.time * p.sway + p.phase) * 14 * dt;
+      return p.y < groundY + 8;
+    });
+    P.splash = P.splash.filter(function (p) {
+      p.vy += 320 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * 1.5;
+      return p.life > 0;
+    });
+  }
+
+  /* Mini challenge: hold 100°C for 3s → charge the cloud → rain → win */
+  function updateCycle(dt) {
+    if (G.target >= 100 && !G.raining) {
+      G.heatTime = Math.min(3, G.heatTime + dt);
+    } else {
+      G.heatTime = Math.max(0, G.heatTime - dt * 1.4);   // the charge slowly drains when it cools down
+    }
+
+    const fill = G.heatTime / 3;
+    meterFill.style.width = (fill * 100).toFixed(1) + '%';
+    cloudMeter.classList.toggle('is-on', fill > 0.02 && !G.raining);
+
+    if (fill >= 1 && !G.raining) startRain();
+  }
+
+  /* ---------- 7. Drawing ---------- */
+  function draw() {
+    const hotness = clamp(G.temp / 100, 0, 1);         // 0 cold → 1 hot
+    const snowAmt = clamp((5 - G.temp) / 20, 0, 1);    // how snowy the ground is
+
+    ctx.clearRect(0, 0, W, H);
+    drawSky(hotness);
+    drawSun(hotness);
+    drawHills(snowAmt);
+    drawGround(snowAmt);
+    drawSnow();
+    drawShadow();
+    drawCharacterWithMorph();
+    drawBubbles();
+    drawSteam();
+    drawSplash();
+    drawVignette();
+  }
+
+  /* Sky: from cool blue to warm orange as it heats up */
+  function drawSky(hotness) {
+    const top    = mixColor([214, 238, 255], [255, 232, 206], hotness);
+    const bottom = mixColor([178, 220, 255], [255, 203, 168], hotness);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgba(top, 1));
+    g.addColorStop(1, rgba(bottom, 1));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /* Sun: bigger and more orange when hot, rays spin slowly */
+  function drawSun(hotness) {
+    const cx = W - clamp(W * 0.13, 46, 96);
+    const cy = clamp(H * 0.16, 34, 82);
+    const r  = 20 + hotness * 9;
+    const col = mixColor([255, 245, 200], [255, 150, 60], hotness);
+
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3.4);
+    halo.addColorStop(0, rgba(col, 0.5));
+    halo.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 3.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(G.time * 0.25);
+    ctx.fillStyle = rgba(col, 0.8);
+    for (let i = 0; i < 12; i++) {
+      ctx.rotate(Math.PI / 6);
+      ctx.beginPath();
+      ctx.ellipse(0, -r * 1.85, r * 0.13, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = rgba(col, 1);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* Two hills in the distance */
+  function drawHills(snowAmt) {
+    const hillA = mixColor([110, 190, 132], [214, 236, 252], snowAmt);
+    const hillB = mixColor([146, 214, 152], [238, 248, 255], snowAmt);
+
+    ctx.fillStyle = rgba(hillA, 0.85);
+    ctx.beginPath();
+    ctx.ellipse(W * 0.18, groundY + 6, W * 0.42, H * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = rgba(hillB, 0.95);
+    ctx.beginPath();
+    ctx.ellipse(W * 0.84, groundY + 10, W * 0.44, H * 0.19, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* Ground: turns into snow when it gets cold */
+  function drawGround(snowAmt) {
+    const top    = mixColor([150, 226, 152], [244, 252, 255], snowAmt);
+    const bottom = mixColor([86, 182, 118],  [196, 226, 248], snowAmt);
+    const g = ctx.createLinearGradient(0, groundY, 0, H);
+    g.addColorStop(0, rgba(top, 1));
+    g.addColorStop(1, rgba(bottom, 1));
+
+    roundRectTop(0, groundY, W, H - groundY, 22);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    // little grass tufts
+    ctx.strokeStyle = rgba([70, 150, 100], 0.5 - snowAmt * 0.35);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i++) {
+      const x = ((i + 0.5) / 12) * W;
+      const h = 6 + (i % 3) * 3;
+      ctx.beginPath();
+      ctx.moveTo(x, groundY + 5);
+      ctx.quadraticCurveTo(x + 3, groundY + 5 - h * 0.6, x + 6, groundY + 5 - h);
+      ctx.stroke();
+    }
+  }
+
+  function drawSnow() {
+    ctx.fillStyle = 'rgba(255,255,255,.92)';
+    for (let i = 0; i < G.particles.snow.length; i++) {
+      const p = G.particles.snow[i];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* Shadow on the ground — fainter the higher it floats */
+  function drawShadow() {
+    const h = clamp((groundY - (G.y + R)) / 220, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, (0.3 - h * 0.22) * G.alpha);
+    ctx.fillStyle = '#2b5d7a';
+    ctx.beginPath();
+    ctx.ellipse(G.x, groundY + 8, R * (1.3 - h * 0.5), R * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* Cross-fade on state change, so it looks like a magic trick */
+  function drawCharacterWithMorph() {
+    if (G.morph < 1) {
+      ctx.save();
+      ctx.globalAlpha = (1 - G.morph) * 0.9;
+      drawWaterBody(G.x, G.y, R * (0.78 + G.morph * 0.22), G.prevPhase);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha = G.morph < 1 ? 0.35 + G.morph * 0.65 : G.alpha;
+    drawWaterBody(G.x, G.y, R * (0.82 + G.morph * 0.18), G.phase);
+    ctx.restore();
+  }
+
+  /** Draw the body and the face for the given state */
+  function drawWaterBody(cx, cy, r, phase) {
+    if (phase === 'ice')        drawIceCube(cx, cy, r);
+    else if (phase === 'vapor') drawVapor(cx, cy, r);
+    else                        drawDrop(cx, cy, r);
+    drawFace(cx, cy, r, phase);
+  }
+
+  /* — Ice: rounded cube with frost crystals — */
+  function drawIceCube(cx, cy, r) {
+    const s = r * 1.12;
+    const shiver = Math.abs(G.vy) > 40 ? 0 : Math.sin(G.time * 22) * 0.6;  // shivers from the cold
+    const g = ctx.createLinearGradient(cx - s, cy - s, cx + s, cy + s);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.45, '#e2f3ff');
+    g.addColorStop(1, '#a8d8ff');
+
+    ctx.save();
+    ctx.translate(cx + shiver, cy);
+    ctx.rotate(-0.05);
+
+    roundRect(-s, -s, s * 2, s * 2, r * 0.34);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = 'rgba(255,255,255,.95)';
+    ctx.stroke();
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(120,190,240,.55)';
+    ctx.stroke();
+
+    // frost crystals: thin crossing lines
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.55, -s * 0.55); ctx.lineTo(s * 0.15, s * 0.1);
+    ctx.moveTo(s * 0.5, -s * 0.6);    ctx.lineTo(-s * 0.1, s * 0.2);
+    ctx.moveTo(-s * 0.62, s * 0.35);  ctx.lineTo(-s * 0.1, s * 0.62);
+    ctx.stroke();
+
+    // highlight
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.42, -s * 0.5, s * 0.2, s * 0.34, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /* — Liquid: classic teardrop shape with a gentle wobble — */
+  function drawDrop(cx, cy, r) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.sin(G.time * 2.4) * 0.05);
+
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.2, 0, 0, r * 1.5);
+    g.addColorStop(0, 'rgba(190,236,255,.98)');
+    g.addColorStop(0.45, 'rgba(110,196,250,.95)');
+    g.addColorStop(1, 'rgba(40,140,215,.95)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.62);
+    ctx.bezierCurveTo(r * 1.02, -r * 0.62, r * 1.0, r * 0.42, 0, r * 1.0);
+    ctx.bezierCurveTo(-r * 1.0, r * 0.42, -r * 1.02, -r * 0.62, 0, -r * 1.62);
+    ctx.closePath();
+    ctx.fill();
+
+    // rim light + inner reflections
+    ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.34, r * 0.05, r * 0.18, r * 0.3, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(r * 0.3, r * 0.42, r * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /* — Vapor: soft translucent steam puffs — */
+  function drawVapor(cx, cy, r) {
+    const puff = function (dx, dy, rr, a) {
+      const g = ctx.createRadialGradient(cx + dx, cy + dy, rr * 0.15, cx + dx, cy + dy, rr);
+      g.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+      g.addColorStop(0.65, 'rgba(248,252,255,' + (a * 0.55) + ')');
+      g.addColorStop(1, 'rgba(240,250,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx + dx, cy + dy, rr, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    puff(-r * 0.45, r * 0.15, r * 0.85, 0.85);
+    puff(r * 0.42, r * 0.05, r * 0.8, 0.8);
+    puff(0, -r * 0.18, r * 1.0, 0.9);
+  }
+
+  /* — Face: a different expression for every state — */
+  function drawFace(cx, cy, r, phase) {
+    const eyeY = cy - r * 0.12;
+    const eyeX = r * 0.34;
+
+    // blush
+    ctx.fillStyle = 'rgba(255,150,175,.35)';
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.58, eyeY + r * 0.36, r * 0.2, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r * 0.58, eyeY + r * 0.36, r * 0.2, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (phase === 'vapor') {
+      // happy closed eyes ^ ^
+      ctx.strokeStyle = '#3a5a7d';
+      ctx.lineWidth = Math.max(2, r * 0.09);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx - eyeX, eyeY + r * 0.06, r * 0.2, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx + eyeX, eyeY + r * 0.06, r * 0.2, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    } else {
+      // round eyes
+      const eyeR = phase === 'ice' ? r * 0.26 : r * 0.3;
+      for (let s = -1; s <= 1; s += 2) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx + s * eyeX, eyeY, eyeR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#34506e';
+        ctx.beginPath();
+        ctx.arc(cx + s * eyeX + (phase === 'ice' ? 0 : r * 0.03), eyeY + r * 0.02, eyeR * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx + s * eyeX + eyeR * 0.22, eyeY - eyeR * 0.28, eyeR * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // mouth
+    ctx.strokeStyle = '#34506e';
+    ctx.lineWidth = Math.max(2, r * 0.085);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (phase === 'ice') {
+      ctx.arc(cx, cy + r * 0.36, r * 0.13, 0, Math.PI * 2);                 // mouth shrinks into a small "o" from the cold
+    } else if (phase === 'vapor') {
+      ctx.arc(cx, cy + r * 0.28, r * 0.3, Math.PI * 0.12, Math.PI * 0.88);  // big laugh
+    } else {
+      ctx.arc(cx, cy + r * 0.24, r * 0.28, Math.PI * 0.18, Math.PI * 0.82); // smile
+    }
+    ctx.stroke();
+  }
+
+  function drawBubbles() {
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < G.particles.bubble.length; i++) {
+      const p = G.particles.bubble[i];
+      ctx.globalAlpha = clamp(p.life, 0, 1);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSteam() {
+    for (let i = 0; i < G.particles.steam.length; i++) {
+      const p = G.particles.steam[i];
+      const g = ctx.createRadialGradient(p.x, p.y, p.r * 0.15, p.x, p.y, p.r);
+      g.addColorStop(0, 'rgba(255,255,255,' + (0.55 * clamp(p.life, 0, 1)) + ')');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawSplash() {
+    ctx.fillStyle = 'rgba(160,215,255,.95)';
+    for (let i = 0; i < G.particles.splash.length; i++) {
+      const p = G.particles.splash[i];
+      ctx.globalAlpha = clamp(p.life, 0, 1);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawVignette() {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.78);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(30,70,110,.13)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /* Canvas helpers: rounded rect / rounded top rect */
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function roundRectTop(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* ---------- 8. UI copy and state sync ---------- */
+  let hudKey = '';
+  function updateHUD() {
+    const t = G.target;
+    let emoji, name, tip, cls;
+
+    if (t < 0) {
+      emoji = '🧊'; name = 'Ice Cube'; cls = 'is-cold';
+      tip = '❄️ Below 0°C Little Droplet freezes into an ice cube — the water molecules line up in neat rows, and snow starts to fall!';
+    } else if (t < 100) {
+      emoji = '💧'; name = 'Water Drop'; cls = '';
+      tip = '💧 Between 0°C and 99°C water is liquid — it flows, wobbles and can be poured into a cup.';
+    } else {
+      emoji = '☁️'; name = 'Water Vapor'; cls = 'is-hot';
+      tip = '🔥 At 100°C (the boiling point) water turns into vapor and rises into the sky — that is evaporation.';
+    }
+
+    if (G.raining) {
+      tip = '🌧️ The cloud is full of droplets, so they fall as rain — that is precipitation, and the water is back on the ground!';
+      cls = 'is-rain';
+    } else if (t >= 100 && G.heatTime > 0.15) {
+      tip = '☁️ The vapor is rising and charging up the cloud — hold for 3 seconds and it will rain!';
+      cls = 'is-hot';
+    }
+
+    const key = emoji + '|' + tip;
+    if (key !== hudKey) {
+      hudKey = key;
+      stateEmoji.textContent = emoji;
+      stateName.textContent = name;
+      stateBadge.className = 'state' + (t < 0 ? ' state-ice' : t >= 100 ? ' state-vapor' : '');
+      tipEl.textContent = tip;
+      tipEl.className = 'tip ' + cls;
+      tempValueEl.style.color = t < 0 ? '#2f7fc4' : t >= 100 ? '#e8663f' : '#2f95e0';
+    }
+  }
+
+  /** Set the temperature (slider, presets and reset all run through here) */
+  function setTemp(v, silent) {
+    v = clamp(Number(v) || 0, -20, 120);
+    G.target = v;
+    slider.value = String(v);
+    slider.setAttribute('aria-valuetext', v + ' degrees Celsius');
+    tempValueEl.textContent = String(Math.round(v));
+    quickBtns.forEach(function (b) {
+      const active = Number(b.dataset.temp) === v;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    if (!silent) hideHint();
+  }
+
+  function hideHint() {
+    if (!stageHint.classList.contains('is-hidden')) stageHint.classList.add('is-hidden');
+  }
+
+  /* Rain: cloud darkens → drops fall → win dialog appears */
+  function startRain() {
+    if (G.raining) return;
+    G.raining = true;
+    cloudEl.classList.add('is-dark');
+    cloudMeter.classList.remove('is-on');
+    buildRainDrops();
+    rainLayer.classList.add('is-active');
+    if (navigator.vibrate) navigator.vibrate([18, 40, 18]);
+
+    setTimeout(function () {
+      if (G.raining && !G.won) showWin();
+    }, 1100);
+  }
+
+  function buildRainDrops() {
+    rainLayer.innerHTML = '';
+    const n = window.innerWidth < 560 ? 26 : 42;
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('span');
+      d.className = 'drop';
+      d.style.left = rand(0, 100).toFixed(2) + '%';
+      d.style.height = rand(14, 30).toFixed(0) + 'px';
+      d.style.opacity = rand(0.45, 1).toFixed(2);
+      d.style.animationDuration = rand(0.65, 1.25).toFixed(2) + 's';
+      d.style.animationDelay = (-rand(0, 1.4)).toFixed(2) + 's';
+      rainLayer.appendChild(d);
+    }
+  }
+
+  function showWin() {
+    G.won = true;
+    modal.hidden = false;
+    requestAnimationFrame(function () { modal.classList.add('is-open'); });
+    if (navigator.vibrate) navigator.vibrate([30, 60, 30, 60, 90]);
+  }
+
+  function resetGame() {
+    modal.classList.remove('is-open');
+    setTimeout(function () { modal.hidden = true; }, 320);
+
+    G.raining = false;
+    G.won = false;
+    G.heatTime = 0;
+    G.alpha = 1;
+    G.x = W / 2;
+    G.y = groundY - R;
+    G.vy = 0;
+    G.particles.steam.length = 0;
+    G.particles.splash.length = 0;
+
+    cloudEl.classList.remove('is-dark');
+    rainLayer.classList.remove('is-active');
+    rainLayer.innerHTML = '';
+    meterFill.style.width = '0%';
+    cloudMeter.classList.remove('is-on');
+
+    setTemp(25, true);
+    hideHint();
+  }
+
+  /* ---------- 9. Event wiring ---------- */
+  slider.addEventListener('input', function (e) { setTemp(e.target.value); });
+  slider.addEventListener('pointerdown', hideHint);
+
+  quickBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () { setTemp(btn.dataset.temp); });
+  });
+
+  replayBtn.addEventListener('click', resetGame);
+
+  // Keyboard extras: ←/→ nudge the temperature, 1/2/3 jump between states
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft')  setTemp(G.target - 1);
+    if (e.key === 'ArrowRight') setTemp(G.target + 1);
+    if (e.key === '1') setTemp(-10);
+    if (e.key === '2') setTemp(25);
+    if (e.key === '3') setTemp(100);
+  });
+
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 220); });
+
+  /* ---------- 10. Main loop ---------- */
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw();
+    updateHUD();
+    requestAnimationFrame(loop);
+  }
+
+  /* Start */
+  resize();
+  G.x = W / 2;
+  G.y = groundY - R;
+  setTemp(25, true);
+  updateHUD();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
